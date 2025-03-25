@@ -58,6 +58,10 @@ lsp 插件:
 
 - gopls(go LSP)
 - pyright(python LSP)
+
+
+> 在安装模块之后，发现依赖关系还是报错，除了直接退出重新打开nvim，还可以通过命令:LspRestart，LSP插件重新打开之后就恢复正常了。
+
 ### Formatting
 参考链接：
 > [https://www.lazyvim.org/extras/formatting/black](https://www.lazyvim.org/extras/formatting/black)
