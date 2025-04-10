@@ -60,3 +60,7 @@
 
 文档备注：
 - <prefix>为导航键，为<ctrl-a>或者<ctrl-b>
+
+修改状态栏背景颜色（设置为default)：
+- tmux_conf_theme_status_right_bg(右边状态栏)
+- tmux_conf_theme_status_bg（全局）
