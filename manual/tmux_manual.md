@@ -45,6 +45,10 @@
 ```
 <ctrl-a><ctrl-b> &
 ```
+交换窗口
+```
+<ctrl-a><ctrl-b> >
+```
 
 ### Mode
 进入Copy-Mode模式
