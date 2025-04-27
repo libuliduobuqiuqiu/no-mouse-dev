@@ -47,6 +47,7 @@ end
 | --- | --- | --- |
 | <S-h> | (在树形列表中）打开隐藏文件 | n |
 | <leader> e | 打开当前文件树 | n |
+| <leader> I | 打开显示Github Ignore文件 | n |
 
 ### Mini
 注释：gcc
