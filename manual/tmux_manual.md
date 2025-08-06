@@ -68,3 +68,13 @@
 修改状态栏背景颜色（设置为default)：
 - tmux_conf_theme_status_right_bg(右边状态栏)
 - tmux_conf_theme_status_bg（全局）
+
+修改底部状态栏背景颜色为透明：
+```
+tmux_conf_theme_status_bg='default'
+tmux_conf_theme_status_fg='white'
+```
+重新载入tmux配置文件
+```
+tmux source-file .tmux.conf
+```
