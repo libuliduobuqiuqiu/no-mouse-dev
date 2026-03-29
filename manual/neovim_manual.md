@@ -75,6 +75,13 @@ lsp 插件:
 
 > 在安装模块之后，发现依赖关系还是报错，除了直接退出重新打开nvim，还可以通过命令:LspRestart，LSP插件重新打开之后就恢复正常了。
 
+如果需要语言增强功能，可通过开启lazyvim中的extras(:LazyExtras)中的lang模块，enable对应需要的语言模块，比如：
+
+- lang.go
+- lang.python
+- lang.typescript
+- lang.mason
+
 ### Formatting
 
 参考链接：
@@ -188,9 +195,9 @@ return {
 <leader> sr
 ```
 
-2. 在Spectre UI中输入搜索关键词
-3. 设置替换成的字符串
-4. 选择需要替换的文件或者目录: \r替换单个,\s替换全部
+1. 在Spectre UI中输入搜索关键词
+2. 设置替换成的字符串
+3. 选择需要替换的文件或者目录: \r替换单个,\s替换全部
 
 #### 额外插件
 
