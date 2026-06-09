@@ -35,7 +35,12 @@
 查看切换当前已存在的session：
 
 ```
-<ctrl-b>/<ctrl-b> s
+<ctrl-a>/<ctrl-b> s
+```
+
+直接新建session：
+```
+<ctrl-a>/<ctrl-b> + <ctrl-a>/<ctrl-b> c
 ```
 
 ### Window
