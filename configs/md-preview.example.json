@@ -1,0 +1,19 @@
+{
+  "default_service": "project",
+  "services": {
+    "project": {
+      "directory": "..",
+      "host": "127.0.0.1",
+      "port": 8080,
+      "open_browser": false,
+      "default_doc": "Readme.md"
+    },
+    "manual": {
+      "directory": "../manual",
+      "host": "127.0.0.1",
+      "port": 8081,
+      "open_browser": false,
+      "default_doc": "vim_manual.md"
+    }
+  }
+}

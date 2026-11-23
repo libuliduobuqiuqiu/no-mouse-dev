@@ -1,0 +1,263 @@
+#!/usr/bin/env python3
+"""Configurable mdserve launcher for Linux/macOS (Python 3.8+)."""
+import argparse
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import shutil
+import signal
+import subprocess
+import sys
+import time
+
+
+def legacy_identity(pid):
+    """Read old state records with unlimited ps width and a stable locale."""
+    result = subprocess.run(
+        ["ps", "-ww", "-p", str(pid), "-o", "lstart=", "-o", "args="],
+        capture_output=True, text=True, check=False, env=dict(os.environ, LC_ALL="C"),
+    )
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def identity(pid):
+    """Use kernel birth ticks on Linux; ignore mutable command text and ps width."""
+    if sys.platform.startswith("linux"):
+        try:
+            # The command in parentheses may itself contain spaces or ')'.
+            fields = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
+            if fields[0] in {"Z", "X"}:
+                return ""
+            boot = Path("/proc/sys/kernel/random/boot_id").read_text().strip()
+            return f"linux:{boot}:{fields[19]}"
+        except (FileNotFoundError, ProcessLookupError):
+            return ""
+    result = subprocess.run(
+        ["ps", "-p", str(pid), "-o", "stat=", "-o", "lstart="],
+        capture_output=True, text=True, check=False, env=dict(os.environ, LC_ALL="C"),
+    )
+    fields = result.stdout.strip().split(None, 1)
+    if result.returncode or len(fields) != 2 or fields[0].startswith("Z"):
+        return ""
+    return "ps:" + fields[1]
+
+
+def running(state):
+    if not state or not state.get("identity"):
+        return False
+    current = identity(state["pid"])
+    if not current:
+        return False
+    saved = state["identity"]
+    if saved.startswith(("linux:", "ps:")):
+        return current == saved
+    # ps lstart is a wall-clock estimate and can shift after clock adjustments.
+    # For old records only, adopt the saved PID when its complete command still
+    # matches exactly. Never use a broad process-name search or a partial match
+    # when the recorded birth time has changed.
+    legacy = legacy_identity(state["pid"])
+    if legacy.startswith(saved):
+        return True
+    previous_parts, current_parts = saved.split(None, 5), legacy.split(None, 5)
+    return (len(previous_parts) == len(current_parts) == 6 and
+            previous_parts[5] == current_parts[5])
+
+
+def command(config_path, config):
+    allowed = {"directory", "host", "port", "open_browser", "default_doc"}
+    if not isinstance(config, dict) or set(config) - allowed:
+        raise ValueError("配置必须是 JSON 对象，且只能包含：" + ", ".join(sorted(allowed)))
+    directory = config.get("directory")
+    if not isinstance(directory, str) or not directory.strip():
+        raise ValueError("directory 必须是非空路径")
+    directory = Path(os.path.expandvars(directory)).expanduser()
+    if not directory.is_absolute():
+        directory = config_path.parent / directory
+    directory = directory.resolve()
+    if not directory.is_dir():
+        raise ValueError(f"目录不存在：{directory}")
+    host, port = config.get("host", "127.0.0.1"), config.get("port", 8080)
+    if not isinstance(host, str) or not host.strip() or any(c.isspace() for c in host):
+        raise ValueError("host 必须是 IP 或主机名")
+    if type(port) is not int or not 1 <= port <= 65535:
+        raise ValueError("port 必须是 1–65535 的整数")
+    if type(config.get("open_browser", False)) is not bool:
+        raise ValueError("open_browser 必须是布尔值")
+    doc = config.get("default_doc", "README.md")
+    if not isinstance(doc, str) or not doc:
+        raise ValueError("default_doc 必须是非空字符串")
+    binary = shutil.which("mdserve")
+    if not binary:
+        raise ValueError("找不到 mdserve，请先安装并加入 PATH")
+    addr = f"[{host.strip('[]')}]:{port}" if ":" in host else f"{host}:{port}"
+    args = [binary, "-dir", str(directory), "-addr", addr,
+            "-default-doc", doc, "-no-update-check"]
+    if config.get("open_browser", False):
+        args.append("-open")
+    return args
+
+
+def operate(args, config_path, name, config):
+    key = hashlib.sha256((str(config_path) + "\0" + name).encode()).hexdigest()[:20]
+    root = Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local/state"))) / "md-preview" / key
+    root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    state_path, log_path = root / "state.json", root / "service.log"
+    # Serialize lifecycle operations for each config.
+    with (root / "lock").open("a") as lock:
+        if args.action in {"start", "stop"}:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                raise ValueError("该服务已有启动或停止操作，请稍后重试")
+        state = json.loads(state_path.read_text()) if state_path.exists() else None
+        alive = running(state)
+        if alive and args.action in {"start", "stop"} and not state["identity"].startswith(("linux:", "ps:")):
+            state["identity"] = identity(state["pid"])
+            temporary = state_path.with_suffix(".tmp")
+            temporary.write_text(json.dumps(state))
+            temporary.replace(state_path)
+            print(f"已核对 PID {state['pid']} 的命令并升级旧版进程记录")
+        if args.action == "status":
+            print(f"运行中，PID {state['pid']}" if alive else "未运行")
+            print(f"进程记录：{state_path}")
+            if state and not alive:
+                print(f"记录的 PID {state['pid']} 已退出或身份不匹配")
+            print(f"日志：{log_path}")
+            return 0 if alive else 1
+        if args.action == "logs":
+            if log_path.exists():
+                print(log_path.read_text(errors="replace"), end="")
+            else:
+                print("暂无后台日志")
+            return 0
+        if args.action == "stop":
+            if alive:
+                os.kill(state["pid"], signal.SIGTERM)
+                for _ in range(50):
+                    if not running(state):
+                        break
+                    time.sleep(0.1)
+                else:
+                    # Revalidate immediately before escalation, avoiding PID reuse.
+                    if running(state):
+                        os.kill(state["pid"], signal.SIGKILL)
+                    for _ in range(30):
+                        if not running(state):
+                            break
+                        time.sleep(0.1)
+                    else:
+                        raise ValueError(f"PID {state['pid']} 强制停止后仍未退出")
+                state_path.unlink(missing_ok=True)
+                print("已停止")
+            else:
+                if state and identity(state["pid"]):
+                    raise ValueError(f"PID {state['pid']} 身份不匹配，未发送信号；进程记录：{state_path}")
+                if state_path.exists():
+                    state_path.unlink()
+                print("未运行")
+            return 0
+        if alive:
+            print(f"已在运行，PID {state['pid']}")
+            return 0
+        if state and identity(state["pid"]):
+            raise ValueError(f"旧记录 PID {state['pid']} 身份不匹配，请检查 {state_path}，避免重复启动")
+        cmd = command(config_path, config)
+        output = log_path.open("ab") if args.background else None
+        try:
+            proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL if args.background else None,
+                                    stdout=output, stderr=output, start_new_session=args.background)
+        finally:
+            if output:
+                output.close()
+        state = {"pid": proc.pid, "identity": identity(proc.pid),
+                 "service": name, "config": str(config_path), "command": cmd}
+        if not state["identity"]:
+            proc.wait(timeout=5)
+            raise ValueError(f"mdserve 未能运行，请检查日志：{log_path}")
+        temporary = state_path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(state))
+        temporary.replace(state_path)
+        if args.background:
+            time.sleep(0.5)
+            if proc.poll() is not None:
+                raise ValueError(f"mdserve 启动后退出（{proc.returncode}），请查看 {log_path}")
+            print(f"已启动后台进程，PID {proc.pid}\n进程记录：{state_path}\n日志：{log_path}\n实际访问地址请查看日志（端口占用时 mdserve 会自动换端口）")
+            return 0
+        fcntl.flock(lock, fcntl.LOCK_UN)
+        print("前台运行，按 Ctrl+C 停止", flush=True)
+        try:
+            return proc.wait()
+        except KeyboardInterrupt:
+            if proc.poll() is None:
+                proc.terminate()
+            return proc.wait()
+
+
+def main():
+    parser = argparse.ArgumentParser(description="按名称管理多个目录的 mdserve 服务")
+    parser.add_argument("action", choices=["start", "stop", "status", "logs", "list"], nargs="?", default="start")
+    parser.add_argument("-c", "--config", default=os.environ.get(
+        "MD_PREVIEW_CONFIG", str(Path(__file__).resolve().parents[2] / "configs/md-preview.json")))
+    parser.add_argument("-b", "--background", action="store_true", help="后台运行（仅 start）")
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument("-s", "--service", help="服务名称")
+    selection.add_argument("--all", action="store_true", help="操作全部服务；批量启动需要 --background")
+    args = parser.parse_args()
+    if args.background and args.action != "start":
+        parser.error("--background 只能与 start 一起使用")
+    config_path = Path(args.config).expanduser().resolve()
+    data = json.loads(config_path.read_text())
+    if not isinstance(data, dict) or set(data) - {"services", "default_service"}:
+        raise ValueError("配置必须包含 services 对象及可选的 default_service")
+    services = data.get("services")
+    if not isinstance(services, dict) or not services:
+        raise ValueError("services 必须是非空对象，以服务名称为键")
+    for name, config in services.items():
+        if not name.strip() or not isinstance(config, dict):
+            raise ValueError("服务名称不能为空，每个服务必须是配置对象")
+        if name == "all":
+            raise ValueError("all 是批量操作的保留名称，请使用其他服务名称")
+    default = data.get("default_service", next(iter(services)))
+    if not isinstance(default, str) or default not in services:
+        raise ValueError("default_service 必须指向已配置的服务")
+    if args.service and args.service not in services:
+        raise ValueError(f"未知服务：{args.service}；可选：{', '.join(services)}")
+    if args.action == "list":
+        for name, config in services.items():
+            print(f"{name}: {config.get('directory')} -> {config.get('host', '127.0.0.1')}:{config.get('port', 8080)}"
+                  + ("（默认前台服务）" if name == default else ""))
+        return 0
+    names = ([args.service] if args.service else list(services)
+             if args.all or args.action != "start" or args.background else [default])
+    if args.action == "start" and not args.background and len(names) > 1:
+        parser.error("批量启动请使用 --background；前台运行请指定 --service")
+    # Validate every selected service before starting any of them.
+    if args.action == "start":
+        addresses = {}
+        for name in names:
+            cmd = command(config_path, services[name])
+            address = cmd[cmd.index("-addr") + 1]
+            if address in addresses:
+                raise ValueError(f"服务 {addresses[address]} 和 {name} 使用相同地址：{address}")
+            addresses[address] = name
+    result = 0
+    for name in names:
+        print(f"[{name}]", flush=True)
+        try:
+            code = operate(args, config_path, name, services[name])
+            if code:
+                result = 1
+        except (OSError, ValueError, KeyError) as exc:
+            print(f"[{name}] 错误：{exc}", file=sys.stderr)
+            result = 1
+    return result
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"错误：{exc}", file=sys.stderr)
+        sys.exit(1)

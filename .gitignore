@@ -1,0 +1,3 @@
+# 本机实际配置；样例配置保留在版本控制中。
+/configs/md-preview.json
+__pycache__/

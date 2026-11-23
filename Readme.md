@@ -14,6 +14,66 @@
 > [https://github.com/libuliduobuqiuqiu/no-mouse-dev](https://github.com/libuliduobuqiuqiu/no-mouse-dev)
 
 ## 工具
+
+### 一键启动多个 Markdown 文档服务
+
+通过根目录的 `Makefile` 管理已安装的 `mdserve`，需要 Python 3.8+，支持 Linux、WSL 和 macOS，无第三方 Python 依赖。`make` 或 `make help` 查看命令帮助。
+
+配置放在根目录 `configs/` 下：
+
+- `md-preview.example.json`：提交到仓库的样例。
+- `md-preview.json`：实际生效的本机配置，已加入 `.gitignore`。
+
+首次运行 `make md-preview-config` 从样例创建实际配置，已有文件不会覆盖。Makefile 顶部的 `MD_PREVIEW_CONFIG` 指定实际配置，也可通过命令行覆盖。
+
+同一配置可以定义多个服务，每个服务有独立的目录、地址和端口：
+
+```json
+{
+  "default_service": "project",
+  "services": {
+    "project": {
+      "directory": "..",
+      "host": "127.0.0.1",
+      "port": 8080,
+      "open_browser": false,
+      "default_doc": "Readme.md"
+    },
+    "manual": {
+      "directory": "../manual",
+      "host": "127.0.0.1",
+      "port": 8081,
+      "open_browser": false,
+      "default_doc": "vim_manual.md"
+    }
+  }
+}
+```
+
+`services` 的键是服务名称（Makefile 将 `all` 保留为批量选择值）。可继续增加任意目录，例如 `notes`、`work`。`directory` 支持 `~`、环境变量和相对于**配置文件所在目录**的路径；上例分别预览项目根目录和 `manual/`。`default_doc` 是首页文档，注意文件名大小写；`open_browser` 控制是否启动浏览器。`default_service` 指定默认前台服务，省略时使用配置中的第一个服务。
+
+```sh
+make md-preview-list                    # 列出配置的服务
+make md-preview-bg                      # 同时后台启动全部服务
+make md-preview-bg SERVICE=manual       # 只后台启动 manual
+make md-preview SERVICE=project         # 只前台启动 project，Ctrl+C 停止
+make md-preview                         # 前台启动 default_service
+make md-preview-status                  # 查看全部服务状态
+make md-preview-logs SERVICE=manual     # 只查看 manual 日志
+make md-preview-stop SERVICE=manual     # 只停止 manual，其他服务继续运行
+make md-preview-stop                    # 停止全部服务
+```
+
+后台启动、停止、状态、日志命令省略 `SERVICE` 时操作全部服务，也可显式使用 `SERVICE=all`。前台启动一次管理一个服务，多个前台服务可分别在不同终端启动。每个服务分别保存进程状态和日志，重复启动会提示已有进程，单个服务失败时批量操作会继续处理其他服务并返回非零退出码。启动前会校验所有选中配置，同一批次配置了完全相同的监听地址时会报错。
+
+后台启动时会输出 PID 和 `state.json` 路径。停止命令读取该记录并校验进程启动身份，先发送 `SIGTERM`，等待 5 秒仍未退出时再次校验后发送 `SIGKILL`；确认退出后删除记录。Linux 使用内核进程启动时间和系统启动标识校验，避免系统时间调整、终端宽度变化或 PID 被复用时误判。兼容旧版保存的 `ps` 记录：旧记录的时间文本变化时，仅在该 PID 的完整命令与保存值完全一致时接管，并在启停时升级记录；若身份无法匹配，会明确报错并保留记录供排查。启停命令需使用相同用户、配置文件路径及 `XDG_STATE_HOME`。
+
+从其他目录可执行 `make -C /path/to/no-mouse-dev md-preview-bg`。切换配置可用 `make md-preview-bg MD_PREVIEW_CONFIG=/path/to/notes.json`，后续管理命令也需指定相同配置路径。服务身份由配置文件路径和服务名称共同确定；修改目录或端口后需先停止再启动，删除或重命名服务前也请先停止它。
+
+上例访问地址分别为 `http://127.0.0.1:8080` 和 `http://127.0.0.1:8081`。mdserve 遇到端口占用会自动换端口，实际地址以前台输出或对应服务的日志为准。后台启动提示表示进程已运行，不代表 HTTP 就绪检查通过。日志为追加记录，位于 `${XDG_STATE_HOME:-~/.local/state}/md-preview/` 下各服务独立的目录。后台服务不会自动开机启动。
+
+也可直接使用 `python3 tools/md-preview/md-preview start -b --all`，默认读取 `configs/md-preview.json`；`--service manual` 选择单个服务，`-c` 指定配置文件。
+
 **纯键盘开发使用到的插件或者工具：**
 
 - WSL(虚拟环境)
