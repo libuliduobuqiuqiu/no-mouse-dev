@@ -4,9 +4,9 @@
 --   opts = { style = "night" },
 -- }
 return {
-  -- add gruvbox
+  -- add monokai
   { "https://github.com/tanvirtin/monokai.nvim" },
-  -- Configure LazyVim to load gruvbox
+  -- Configure LazyVim to load monokai_pro
   {
     "LazyVim/LazyVim",
     opts = {

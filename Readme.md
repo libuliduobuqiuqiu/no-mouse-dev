@@ -5,7 +5,7 @@
 
 
 ## 导语
-> 纯键盘开发，又叫做mouseless programing，旨在通过减少鼠标操作，完全通过用键盘进行开发工作，提高开发效率。
+> 纯键盘开发，又叫做mouseless programming，旨在通过减少鼠标操作，完全通过用键盘进行开发工作，提高开发效率。
 > 自身真实体验下来完全代替暂时还有点难度，日常公司项目开发过程，普通的IDE（goland）会使用；neovim一般都是用到自己的项目。
 > 另外我只能说neovim有无限可能，而且现在有lazyvim大大降低了使用的门槛，很多插件都基本都有了，代码提示目前LSP也很完善。但是缺点也是很明显，前期你可能会需要了解到很多命令，基础的vim操作，部分会话管理和终端的操作，这些在刚上手的时候都是有一定的门槛，很容易	卡壳，所以我一般都是通过保存笔记到git上。(PS: lazyvim关于命令的导航做的很清晰，这部分前期可以参考）
 > 这篇文章只是粗浅把我自己搜集的一下资料稍微整理一下，方便后期检索，有兴趣的也可以互相交流。
@@ -14,6 +14,8 @@
 > [https://github.com/libuliduobuqiuqiu/no-mouse-dev](https://github.com/libuliduobuqiuqiu/no-mouse-dev)
 
 ## 工具
+
+Clawd on Desk 与 WSL Codex 的 hooks 联动排查、修改文件和回滚方法，见 [桌宠 hooks 修复记录](clawd-hooks.md)。
 
 ### 一键启动多个 Markdown 文档服务
 
@@ -76,19 +78,21 @@ make md-preview-stop                    # 停止全部服务
 
 **纯键盘开发使用到的插件或者工具：**
 
-- WSL(虚拟环境)
+- WSL（Windows 的 Linux 子系统；WSL 1 与 WSL 2 的实现不同）
 - WezTerm(终端工具)
 - NeoVIM(IDE)
 - LazyVIM(NeoVIM 配置)
 - Lsp（pyright,gopls)
 - zsh(oh-my-zsh配置)
-- Tmux(Linux 窗口会话管理工具)
+- tmux（Unix 终端复用与会话管理工具）
 ## 环境搭建
-### Windows虚拟Linux系统：WSL
-> 由于本身是windows系统，抛弃传统的vmware的虚拟机环境，直接使用现在微软的wsl，更加方便快捷，兼容性又好。已经基本满足我的Linux开发环境的要求，但是由于默认开启的wsl功能安装的linux系统都是会在C盘，强迫症发作一定要要安装在D盘，这部分也折腾了一下。
+### Windows 的 Linux 子系统：WSL
+> 由于本身是windows系统，抛弃传统的vmware的虚拟机环境，直接使用现在微软的wsl，更加方便快捷，兼容性又好。已经基本满足我的Linux开发环境的要求，但早期默认安装的发行版通常放在系统盘，强迫症发作一定要要安装在D盘，这部分也折腾了一下。
 
 #### 手动安装
-**手动安装指定的位置：**
+当前版本可在 PowerShell 中通过 `wsl --install --distribution Ubuntu --location D:\WSL\Ubuntu` 指定安装位置，是否支持该参数以本机 `wsl --help` 为准。已有发行版也可通过导出、导入迁移。参见 [WSL 基本命令](https://learn.microsoft.com/en-us/windows/wsl/basic-commands)。
+
+**早期手动安装指定位置的记录：**
 > [https://www.cnblogs.com/xiaoliangyuu/p/15506352.html](https://www.cnblogs.com/xiaoliangyuu/p/15506352.html)
 
 #### 解决异常
@@ -98,13 +102,14 @@ make md-preview-stop                    # 停止全部服务
 **旧版WSL更新内核：**
 > [https://learn.microsoft.com/zh-cn/windows/wsl/install-manual#step-4---download-the-linux-kernel-update-package](https://learn.microsoft.com/zh-cn/windows/wsl/install-manual#step-4---download-the-linux-kernel-update-package)
 
-**设置默认WSL用户：(进入到解压缩的ubuntu系统目录)**
-> ubuntu.exe config --default-user root
+**设置默认 WSL 用户：**
+
+通过发行版启动器安装的 Ubuntu，可在 PowerShell 中运行 `ubuntu.exe config --default-user <用户名>`，实际启动器名称以安装的发行版为准。通过 `wsl --import` 导入的发行版没有该启动器，应在发行版内的 `/etc/wsl.conf` 设置 `[user]` 下的 `default=<用户名>`。`root` 是可选账户，不是必须的默认用户。参见 [WSL 默认用户](https://learn.microsoft.com/en-us/windows/wsl/basic-commands#change-the-default-user-for-a-distribution)。
 
 ### 终端模拟器：WezTerm
 > 关于终端有很多选择，自己喜欢用那个都行，这里选择wezterm主要是能通过lua脚本控制终端的设置，高度自定义，还是挺多东西可以整的。
 
-**使用lua脚本：（wezterm.lua ）**
+**Windows 上启动 WSL 的 Lua 示例：（wezterm.lua）**
 ```lua
 -- Pull in the wezterm API
 local wezterm = require 'wezterm'
@@ -127,13 +132,13 @@ c.colors = materia
 -- 透明背景
 -- c.window_background_opacity = 0.9
 
--- 设置背景图片的后的字体
+-- 设置文字单元格的背景不透明度
 c.text_background_opacity  = 1
 
 -- 设置图片
 c.window_background_image = "D:\\Coding\\WezTerm\\WezTerm\\wallhaven-d66zrl.jpg"
 c.window_background_image_hsb = {
-  -- Darken the background image by reducing it to 1/3rd
+  -- 将背景图片亮度降为原来的 10%
   brightness = 0.1,
 
   -- You can adjust the hue by scaling its value.
@@ -163,7 +168,7 @@ return c
 > [https://wezfurlong.org/wezterm/config/files.html](https://wezfurlong.org/wezterm/config/files.html)
 
 **终端默认按键定义；**
-> [https://wezfurlong.org/wezterm/config/default-Keyss.html](https://wezfurlong.org/wezterm/config/default-Keyss.html)
+> [https://wezfurlong.org/wezterm/config/default-keys.html](https://wezfurlong.org/wezterm/config/default-keys.html)
 
 **文章：**
 > [https://www.rayalto.pro/2023/10/25/wezterm-replace-windows-terminal/](https://www.rayalto.pro/2023/10/25/wezterm-replace-windows-terminal/)
@@ -172,13 +177,13 @@ return c
 入门配置：**lazyVIM**
 设置自定义快捷键示例：
 ```lua
-vim.Keyssmap.set('i', 'jj', '<esc>')
+vim.keymap.set('i', 'jj', '<esc>')
 ```
 **LazyVim按键绑定：**
 > [https://www.lazyvim.org/keymaps](https://www.lazyvim.org/keymaps)
 
-**LazyVim Keysmaps：**
-> [https://github.com/LazyVim/LazyVim/blob/main/lua/lazyvim/config/Keysmaps.lua](https://github.com/LazyVim/LazyVim/blob/main/lua/lazyvim/config/Keysmaps.lua)
+**LazyVim Keymaps：**
+> [https://github.com/LazyVim/LazyVim/blob/main/lua/lazyvim/config/keymaps.lua](https://github.com/LazyVim/LazyVim/blob/main/lua/lazyvim/config/keymaps.lua)
 
 ### Python LSP插件：pyright
 pyright虚拟环境库设置：(pyrightconfig.json)
@@ -192,17 +197,18 @@ pyright虚拟环境库设置：(pyrightconfig.json)
 > [https://microsoft.github.io/pyright/#/import-resolution?id=configuring-your-python-environment](https://microsoft.github.io/pyright/#/import-resolution?id=configuring-your-python-environment)
 
 ### Python 虚拟环境工具：Virtualenv
-如何配置进入到指定项目文件夹中自动加在对应的venv目录的环境：（设置.bashrc）
-```
+下面是 Bash 中进入项目后激活当前目录 `venv/` 的简单写法，放在 `.bashrc` 中。`builtin cd "$@"` 保留无参数、多个选项和带空格路径的语义；切换失败时不执行激活。此示例不会在离开目录时自动退出虚拟环境，需要手动执行 `deactivate`。
+
+```bash
 cd() {
-        builtin cd $1
-        if [ -d "venv" ]; then
-                source venv/bin/activate
-        fi
+    builtin cd "$@" || return
+    if [ -f "venv/bin/activate" ]; then
+        source venv/bin/activate
+    fi
 }
 ```
 ### Unix shell：zsh && oh-my-zsh
-> zsh可以理解为传统bash的扩展，能够做到很多高级功能，高级不全，主题，插件，高亮等。oh-my-zsh就是管理zsh配置的一个框架，可以通过oh-my-zsh自由安装喜欢的主题。
+> zsh 是独立的 Shell，吸收了 Bash、ksh、tcsh 的一些特性，并提供自己的交互和脚本功能，不是 Bash 的扩展包。Oh My Zsh 是管理 zsh 配置、插件和主题的框架；语法高亮等功能可由相应插件提供。参见 [Zsh 官方介绍](https://zsh.sourceforge.io/Intro/intro_1.html)。
 
 ```bash
 apt install zsh -y
@@ -214,7 +220,7 @@ oh-my-zsh主题：（powerlevel10k）
 > [https://github.com/romkatv/powerlevel10k](https://github.com/romkatv/powerlevel10k)
 
 ### 会话管理工具：tmux
-> tmux是一个会话管理工具，可以实现在一个窗口多开会话，并且能够在多个终端会话中高效切换。基本是神器，有时候可能需要在一个窗口里看到同时在打印日志，看系统负载，看请求连接数，这种只需要分割成多个会话就能做到。
+> tmux 是终端复用器：一个会话（session）可以包含多个窗口（window），窗口可以分成多个窗格（pane）。例如同时看日志、系统负载和连接数，可以把一个窗口分成多个窗格；离开会话后，后台程序仍可继续运行。
 
 ```bash
 apt install tmux
@@ -235,18 +241,32 @@ $ cp .tmux/.tmux.conf.local .
 
 ## 备注
 ### 关于代理
-设置ALL_PROXY,设置https_proxy,设置http_proxy（备注：自身部署服务测试接口API，有可能会走到代理访问vpn，建议下载更新软件时候才开启，默认关闭）
+代理变量需要通过 `source` 设置到当前 Shell。Linux、WSL 和 macOS 的代理地址取决于代理实际运行的位置，不能一律把 `/etc/resolv.conf` 的 DNS 地址当成代理主机。
+
+- 代理运行在当前 Linux 或 macOS 上：使用 `127.0.0.1`。
+- WSL 2 NAT 模式访问 Windows 代理：可用 `ip route show default` 中的默认网关地址作为 Windows 主机地址，代理需允许该接口连接。
+- WSL 镜像网络模式：可通过 `127.0.0.1` 访问 Windows 服务。
+
+参见 [微软 WSL 网络说明](https://learn.microsoft.com/en-us/windows/wsl/networking)。以下命令在项目根目录执行，端口和地址按实际情况填写：
+
+```sh
+# Linux 本机代理；WSL 访问 Windows 时改为实际可达的 Windows 地址。
+export CLASH_HOST=127.0.0.1
+export CLASH_PORT=7890
+source ./linux-scripts/clash_for_linux.sh set
+source ./linux-scripts/clash_for_linux.sh unset
+# macOS 使用 ./linux-scripts/clash_for_mac.sh，默认主机同为 127.0.0.1。
 ```
-host_ip=$(cat /etc/resolv.conf | grep nameserver | cut -f 2 -d " ")
-export ALL_PROXY="http://$host_ip:7890"
-export https_proxy="http://$host_ip:7890"
-export http_proxy="http://$host_ip:7890"
+
+脚本设置 `ALL_PROXY`、`http_proxy`、`https_proxy`，使用 HTTP 代理地址；`https_proxy` 表示 HTTPS 请求使用的代理，其代理协议仍可为 HTTP。是否读取这些变量由各应用决定。脚本不会修改 `NO_PROXY` 等其他变量。
+
+需要快捷命令时，将下列示例中的项目路径换成自己的绝对路径：
+
+```sh
+alias clash='source /path/to/no-mouse-dev/linux-scripts/clash_for_linux.sh set'
+alias unclash='source /path/to/no-mouse-dev/linux-scripts/clash_for_linux.sh unset'
 ```
-补充shell脚本用于快捷设置代理地址和取消代理地址,具体参考clash_for_linux.sh,增加快捷命令：
-```
-alias clash='source /root/clash_for_linux.sh set'
-alias unclash='source /root/clash_for_linux.sh unset'
-```
+
 ### 关于反人类的大写键
 > 如果纯键盘开发，会发现大写键基本没什么用，但是却是占在最关键的位置，很多时候每次手指去按左ctrl的时候都会受不了，所以建议把这两个键互换，大写可以用shift按住，减少使用大写键；
 
@@ -264,5 +284,4 @@ alias unclash='source /root/clash_for_linux.sh unset'
 ```
 ### 关于最后
 > 其实关于这种模式的开发，相对于传统的开发模式没有孰优孰劣之分，不要为了纯键盘而纯键盘，自己最顺手最重要，因为毕竟这些都是工具，不能真正的解决实际的业务工作。对于我来说，认为这些东西有趣，有时候折腾一下，还是蛮有成就感的就足够了，没必要完全陷入工具焦虑的误区。
-
 

@@ -1,31 +1,25 @@
-# author: linshukai
-# date: 2023-12-26
-# description: Set Clash Config For Linux
+#!/bin/sh
+# Source this script to change proxy variables in the current shell.
+# macOS: set CLASH_HOST and CLASH_PORT for your proxy endpoint.
 
-if [ "$#" -eq 0 ]; then
-  echo "arg1 must <set> or <unset>"
-  exit 0
+if [ "$#" -ne 1 ]; then
+    echo "usage: source clash_for_mac.sh <set|unset>" >&2
+    return 1 2>/dev/null || exit 1
 fi
 
-firstArg=$1
-
-if [ "$firstArg" = "set" ]; then
-
-  host_ip=127.0.0.1
-  export ALL_PROXY="http://$host_ip:7890"
-  export https_proxy="http://$host_ip:7890"
-  export http_proxy="http://$host_ip:7890"
-  echo "ALL_PROXY:$ALL_PROXY,http_proxy:$http_proxy,https_proxy:$https_proxy"
-  echo "set successfully."
-
-elif [ "$firstArg" = "unset" ]; then
-  unset ALL_PROXY
-  unset http_proxy
-  unset https_proxy
-  echo "ALL_PROXY:$ALL_PROXY,http_proxy:$http_proxy,https_proxy:$https_proxy"
-  echo "unset successfully"
-
-else
-  echo "Error Argument."
-
-fi
+case "$1" in
+    set)
+        export ALL_PROXY="http://${CLASH_HOST:-127.0.0.1}:${CLASH_PORT:-7890}"
+        export https_proxy="$ALL_PROXY"
+        export http_proxy="$ALL_PROXY"
+        echo "Proxy enabled: $ALL_PROXY"
+        ;;
+    unset)
+        unset ALL_PROXY http_proxy https_proxy
+        echo "Proxy disabled"
+        ;;
+    *)
+        echo "argument must be set or unset" >&2
+        return 1 2>/dev/null || exit 1
+        ;;
+esac

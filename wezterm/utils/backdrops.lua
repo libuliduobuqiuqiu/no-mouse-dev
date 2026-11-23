@@ -14,7 +14,7 @@ local GLOB_PATTERN = '*.{jpg,jpeg,png,gif,bmp,ico,tiff,pnm,dds,tga}'
 ---@class BackDrops
 ---@field current_idx number index of current image
 ---@field files string[] background images
----@field focus_color string background color when in focus mode. Default is `colors.custom.background`
+---@field focus_color string background color when in focus mode. Default is `colors.background`
 ---@field focus_on boolean focus mode on or off
 local BackDrops = {}
 BackDrops.__index = BackDrops
@@ -46,7 +46,7 @@ function BackDrops:set_files()
 end
 
 ---Override the default `focus_color`
----Default `focus_color` is `colors.custom.background`
+---Default `focus_color` is `colors.background`
 ---@param focus_color string background color when in focus mode
 function BackDrops:set_focus(focus_color)
    self.focus_color = focus_color
@@ -57,6 +57,9 @@ end
 ---@private
 ---@return table
 function BackDrops:_create_opts()
+   if #self.files == 0 then
+      return self:_create_focus_opts()
+   end
    return {
       {
          source = { File = self.files[self.current_idx] },
@@ -108,10 +111,9 @@ end
 ---@param window any WezTerm Window see: https://wezfurlong.org/wezterm/config/lua/window/index.html
 ---@param background_opts table background option
 function BackDrops:_set_opt(window, background_opts)
-   window:set_config_overrides({
-      background = background_opts,
-      enable_tab_bar = window:effective_config().enable_tab_bar,
-   })
+   local overrides = window:get_config_overrides() or {}
+   overrides.background = background_opts
+   window:set_config_overrides(overrides)
 end
 
 ---Override the current window options for background with focus color
@@ -153,7 +155,7 @@ end
 ---Pass in `Window` object to override the current window options
 ---@param window any? WezTerm `Window` see: https://wezfurlong.org/wezterm/config/lua/window/index.html
 function BackDrops:random(window)
-   self.current_idx = math.random(#self.files)
+   self.current_idx = #self.files > 0 and math.random(#self.files) or 1
 
    if window ~= nil then
       self:_set_opt(window, self:_create_opts())
@@ -186,7 +188,7 @@ end
 ---@param window any WezTerm `Window` see: https://wezfurlong.org/wezterm/config/lua/window/index.html
 ---@param idx number index of the `files` array
 function BackDrops:set_img(window, idx)
-   if idx > #self.files or idx < 0 then
+   if type(idx) ~= "number" or idx % 1 ~= 0 or idx < 1 or idx > #self.files then
       wezterm.log_error('Index out of range')
       return
    end

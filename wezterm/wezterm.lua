@@ -3,15 +3,11 @@ local wezterm = require 'wezterm'
 local Config = require('utils')
 
 
--- This table will hold the configuration.
+-- Load images before bindings builds the background selector choices.
+local backdrops = require('utils.backdrops'):set_files()
+backdrops:random()
 local c = Config:init():append(require('utils.bindings')).options
-
-
-require('utils.backdrops')
-   :set_files()
-   -- :set_focus('#000000')
-   :random()
-
+c.background = backdrops:initial_options()
 
 -- 取消 Windows 原生标题栏
 c.window_decorations = "INTEGRATED_BUTTONS|RESIZE"
@@ -23,7 +19,9 @@ c.window_padding = { left = 0, right = 15, top = 0, bottom = 0 }
 c.enable_scroll_bar = true
 
 -- 进入窗口启动命令
-c.default_prog = {"wsl.exe", "--cd", "~"}
+if require("utils.platform").is_win then
+   c.default_prog = {"wsl.exe", "--cd", "~"}
+end
 
 -- and finally, return the configuration to wezterm
 return c
