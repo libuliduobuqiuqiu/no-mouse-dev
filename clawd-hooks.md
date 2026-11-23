@@ -2,7 +2,7 @@
 
 2026 年 11 月 23 日，修复 Windows 上的 Clawd on Desk 无法接收 WSL Ubuntu 中 Codex hook 事件的问题。本次只修改本机的两个启动配置文件，使 hook 通过 Windows Node 向 Windows 桌宠投递事件。
 
-本文记录修改前后的完整配置，方便排查和回滚。示例中的用户目录、安装目录均为当时本机的实际路径，其他机器需要按实际安装位置调整；文章中的示例不会被 Codex 自动加载。
+本文记录修改前后的完整配置，方便排查和回滚，并补充 2026 年 11 月 24 日对更新后确认弹窗消失问题的排查。示例中的用户目录、安装目录均为当时本机的实际路径，其他机器需要按实际安装位置调整；文章中的示例不会被 Codex 自动加载。
 
 ## 问题原因
 
@@ -74,6 +74,74 @@ Codex 仍通过原有 `command` 调用稳定启动脚本，由更新后的脚本
 | `SessionEnd` | `sleeping` | `true` | 23333 |
 
 测试使用临时会话，并发送 `SessionEnd` 结束测试。HTTP 接口已确认接收；桌宠屏幕上的动画切换仍需通过实际对话观察。
+
+## 更新后确认弹窗消失的排查
+
+2026 年 11 月 24 日检查本机 Clawd on Desk 1.7.0：hook 事件可以送达，但命令权限审批和提问选项属于两条不同的处理路径，需要分别验证。
+
+### 权限审批被交回 Codex
+
+检查 Windows 用户数据目录中的 `clawd-prefs.json`，当时配置为：
+
+```json
+{
+  "version": 21,
+  "permissionBubblesEnabled": true,
+  "permissionAutomationMode": "off",
+  "agents": {
+    "codex": {
+      "enabled": true,
+      "permissionsEnabled": true,
+      "permissionMode": "auto"
+    }
+  }
+}
+```
+
+以上仅摘录相关字段，不是可直接覆盖使用的完整配置。该文件及日志位于本机 Windows 的 `%APPDATA%\clawd-on-desk\`。
+
+`permission-debug.log` 从 11 月 18 日起多次记录以下内容，时间戳为 UTC：
+
+```text
+[2026-11-18T16:26:48.088Z] /permission hit | DND=false pending=0
+[2026-11-18T16:26:48.095Z] codex native permission mode -> no decision, native prompt fallback (tool=Bash)
+```
+
+这表明请求已到桌宠，且未开启免打扰；桌宠随后主动交回 Codex 原生审批，并未创建审批气泡。日志中的 `native permission mode` 是回退原因的描述，不代表配置字段当前为 `native`。
+
+核对安装包内的 `src/prefs.js`，配置版本从 20 升到 21 时，会把旧的 `intercept` 或 `native` 一次性迁移为 `auto`。代码注释说明：旧配置无法区分用户主动选择与历史默认值，因此升级时统一迁移。当前配置已是版本 21，符合该迁移后的状态；没有升级前快照，不能仅凭当前文件确认这台机器当时的旧值。
+
+在 `auto` 模式下，`src/codex-approval-routing.js` 会把标记为 WSL 或远程来源的请求交回 Codex；对本机请求，也要核对审批工具、权限模式和会话记录等信息后才决定是否由桌宠处理。因此，气泡开关开启并不保证每次审批都出现桌宠弹窗。
+
+要恢复由桌宠优先接收审批，在桌宠中打开：
+
+**设置 → AI 编程工具 → Codex → 高级 → 所有审批都交给桌宠**。
+
+该设置对应 `agents.codex.permissionMode: "intercept"`。它决定审批由谁接收，不等于自动批准；自动处理行为仍由「权限请求处理」等设置控制。按界面说明，切换后应新开聊天，已经挂起的审批可能仍留在 Codex 中。
+
+用户操作后再次读取配置，已确认 `permissionMode` 为 `intercept`，气泡开关为 `true`，`permissionAutomationMode` 仍为 `off`。这证明设置已保存，实际权限审批弹窗是否恢复仍需新聊天中的权限请求验证。
+
+### 异步提问尚未被当前解析器识别
+
+当前聊天记录中出现的是 `request_user_input_async`，参数使用 `questions[].title` 和字符串形式的 `options`。安装目录中的 `hooks/codex-user-input.js` 则只识别函数名为 `request_user_input` 的记录，问题字段使用 `question`，选项使用含 `label`、`description` 的对象。
+
+调用已安装模块的 `parseCodexUserInputRecord`，使用相同外层记录结构进行独立测试，结果如下：
+
+| 工具及参数格式 | 解析结果 |
+| --- | --- |
+| `request_user_input`，`question` 字段和对象选项 | 识别为提问请求 |
+| `request_user_input_async`，`title` 字段和字符串选项 | 返回 `null`，忽略该记录 |
+
+这确认了当前解析器对异步提问的兼容缺口。开启「所有审批都交给桌宠」不会改变提问解析逻辑，不能据此认为提问提醒也已修复。后续适配需要同时处理工具名、参数格式及实际完成或取消事件；仅修改工具名匹配不足以完成修复。
+
+### 本次测试范围与结论
+
+- 已核查权限请求日志、设置迁移代码、审批路由代码，并验证两种提问格式的解析结果。
+- 用户启用桌宠优先审批后，已核实配置保存成功。
+- 随后发送了一次异步选项提问供用户观察桌宠；截至本文记录时，尚未收到是否出现气泡的反馈。这次提问不属于权限审批，不能用于验证审批弹窗恢复。
+- 本次排查没有修改桌宠安装代码、hook 定义或信任记录；异步提问兼容问题仍待适配。
+
+后续复测应分两步：先在新聊天中观察一次真实的权限审批是否弹出桌宠气泡，再单独验证异步提问提醒，并分别记录结果。
 
 ## 备份与回滚
 
