@@ -50,21 +50,21 @@
 }
 ```
 
-`services` 的键是服务名称（Makefile 将 `all` 保留为批量选择值）。可继续增加任意目录，例如 `notes`、`work`。`directory` 支持 `~`、环境变量和相对于**配置文件所在目录**的路径；上例分别预览项目根目录和 `manual/`。`default_doc` 是首页文档，注意文件名大小写；`open_browser` 控制是否启动浏览器。`default_service` 指定默认前台服务，省略时使用配置中的第一个服务。
+`services` 的键是服务名称（Makefile 将 `all` 保留为批量选择值）。可继续增加任意目录，例如 `notes`、`work`。`directory` 支持 `~`、环境变量和相对于**配置文件所在目录**的路径；上例分别预览项目根目录和 `manual/`。`default_doc` 是首页文档，注意文件名大小写；`open_browser` 控制是否启动浏览器。`default_service` 保留兼容现有配置；前台和后台启动默认均选择全部服务。
 
 ```sh
 make md-preview-list                    # 列出配置的服务
 make md-preview-bg                      # 同时后台启动全部服务
 make md-preview-bg SERVICE=manual       # 只后台启动 manual
 make md-preview SERVICE=project         # 只前台启动 project，Ctrl+C 停止
-make md-preview                         # 前台启动 default_service
+make md-preview                         # 同时前台启动全部服务，Ctrl+C 一并停止
 make md-preview-status                  # 查看全部服务状态
 make md-preview-logs SERVICE=manual     # 只查看 manual 日志
 make md-preview-stop SERVICE=manual     # 只停止 manual，其他服务继续运行
 make md-preview-stop                    # 停止全部服务
 ```
 
-后台启动、停止、状态、日志命令省略 `SERVICE` 时操作全部服务，也可显式使用 `SERVICE=all`。前台启动一次管理一个服务，多个前台服务可分别在不同终端启动。每个服务分别保存进程状态和日志，重复启动会提示已有进程，单个服务失败时批量操作会继续处理其他服务并返回非零退出码。启动前会校验所有选中配置，同一批次配置了完全相同的监听地址时会报错。
+前台启动、后台启动、停止、状态、日志命令省略 `SERVICE` 时操作全部服务，也可显式使用 `SERVICE=all`。前台模式会先启动全部选中服务，再统一等待；Ctrl+C 会停止本次启动的服务，已在运行的服务不受影响。每个服务分别保存进程状态和日志，重复启动会提示已有进程，单个服务失败时批量操作会继续处理其他服务并返回非零退出码。启动前会校验所有选中配置，同一批次配置了完全相同的监听地址时会报错。
 
 后台启动时会输出 PID 和 `state.json` 路径。停止命令读取该记录并校验进程启动身份，先发送 `SIGTERM`，等待 5 秒仍未退出时再次校验后发送 `SIGKILL`；确认退出后删除记录。Linux 使用内核进程启动时间和系统启动标识校验，避免系统时间调整、终端宽度变化或 PID 被复用时误判。兼容旧版保存的 `ps` 记录：旧记录的时间文本变化时，仅在该 PID 的完整命令与保存值完全一致时接管，并在启停时升级记录；若身份无法匹配，会明确报错并保留记录供排查。启停命令需使用相同用户、配置文件路径及 `XDG_STATE_HOME`。
 

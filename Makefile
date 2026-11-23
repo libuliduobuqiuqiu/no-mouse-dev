@@ -2,7 +2,7 @@ PROJECT_ROOT := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 PYTHON ?= python3
 # 实际生效的配置：可在这里修改，也可通过 make 参数覆盖。
 MD_PREVIEW_CONFIG ?= $(PROJECT_ROOT)configs/md-preview.json
-# SERVICE 留空：前台启动默认服务，其他操作针对全部服务。
+# SERVICE 留空：所有操作针对全部服务。
 # SERVICE=名称：指定单个服务；SERVICE=all：显式选择全部。
 SERVICE ?=
 MD_PREVIEW = $(PYTHON) "$(PROJECT_ROOT)tools/md-preview/md-preview" --config "$(MD_PREVIEW_CONFIG)" $(if $(filter all,$(SERVICE)),--all,$(if $(SERVICE),--service "$(SERVICE)"))
@@ -17,7 +17,7 @@ help:
 	  '  help                查看帮助（默认目标）' \
 	  '  md-preview-config   从样例创建实际配置（已有文件不覆盖）' \
 	  '  md-preview-list     列出服务及目录、配置地址' \
-	  '  md-preview          前台启动默认服务，可用 SERVICE=名称 选择' \
+	  '  md-preview          前台启动全部服务，可用 SERVICE=名称 选择' \
 	  '  md-preview-bg       后台启动全部服务，可用 SERVICE=名称 选择' \
 	  '  md-preview-stop     停止全部服务，可用 SERVICE=名称 选择' \
 	  '  md-preview-status   查看全部状态（任一未运行时返回非零退出码）' \

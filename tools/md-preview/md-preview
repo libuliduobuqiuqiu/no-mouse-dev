@@ -99,7 +99,7 @@ def command(config_path, config):
     return args
 
 
-def operate(args, config_path, name, config):
+def operate(args, config_path, name, config, foreground=None):
     key = hashlib.sha256((str(config_path) + "\0" + name).encode()).hexdigest()[:20]
     root = Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local/state"))) / "md-preview" / key
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -171,6 +171,8 @@ def operate(args, config_path, name, config):
         finally:
             if output:
                 output.close()
+        if foreground is not None:
+            foreground.append(proc)
         state = {"pid": proc.pid, "identity": identity(proc.pid),
                  "service": name, "config": str(config_path), "command": cmd}
         if not state["identity"]:
@@ -187,6 +189,8 @@ def operate(args, config_path, name, config):
             return 0
         fcntl.flock(lock, fcntl.LOCK_UN)
         print("前台运行，按 Ctrl+C 停止", flush=True)
+        if foreground is not None:
+            return 0
         try:
             return proc.wait()
         except KeyboardInterrupt:
@@ -203,7 +207,7 @@ def main():
     parser.add_argument("-b", "--background", action="store_true", help="后台运行（仅 start）")
     selection = parser.add_mutually_exclusive_group()
     selection.add_argument("-s", "--service", help="服务名称")
-    selection.add_argument("--all", action="store_true", help="操作全部服务；批量启动需要 --background")
+    selection.add_argument("--all", action="store_true", help="操作全部服务")
     args = parser.parse_args()
     if args.background and args.action != "start":
         parser.error("--background 只能与 start 一起使用")
@@ -227,12 +231,9 @@ def main():
     if args.action == "list":
         for name, config in services.items():
             print(f"{name}: {config.get('directory')} -> {config.get('host', '127.0.0.1')}:{config.get('port', 8080)}"
-                  + ("（默认前台服务）" if name == default else ""))
+                  + ("（默认服务）" if name == default else ""))
         return 0
-    names = ([args.service] if args.service else list(services)
-             if args.all or args.action != "start" or args.background else [default])
-    if args.action == "start" and not args.background and len(names) > 1:
-        parser.error("批量启动请使用 --background；前台运行请指定 --service")
+    names = [args.service] if args.service else list(services)
     # Validate every selected service before starting any of them.
     if args.action == "start":
         addresses = {}
@@ -243,15 +244,51 @@ def main():
                 raise ValueError(f"服务 {addresses[address]} 和 {name} 使用相同地址：{address}")
             addresses[address] = name
     result = 0
-    for name in names:
-        print(f"[{name}]", flush=True)
-        try:
-            code = operate(args, config_path, name, services[name])
-            if code:
+    foreground = [] if args.action == "start" and not args.background else None
+    previous_handler = None
+    if foreground is not None:
+        def interrupted(signum, frame):
+            raise KeyboardInterrupt
+        previous_handler = signal.signal(signal.SIGTERM, interrupted)
+    try:
+        for name in names:
+            print(f"[{name}]", flush=True)
+            try:
+                code = operate(args, config_path, name, services[name], foreground)
+                if code:
+                    result = 1
+            except (OSError, ValueError, KeyError) as exc:
+                print(f"[{name}] 错误：{exc}", file=sys.stderr)
                 result = 1
-        except (OSError, ValueError, KeyError) as exc:
-            print(f"[{name}] 错误：{exc}", file=sys.stderr)
-            result = 1
+        # Start every selected service before waiting for any one of them.
+        if foreground is not None:
+            pending = set(foreground)
+            while pending:
+                for proc in list(pending):
+                    code = proc.poll()
+                    if code is not None:
+                        pending.remove(proc)
+                        if code:
+                            result = 1
+                if pending:
+                    time.sleep(0.1)
+    except KeyboardInterrupt:
+        result = 130
+    finally:
+        if foreground is not None:
+            # Also handle SIGTERM from a parent process or service manager.
+            signal.signal(signal.SIGTERM, signal.SIG_IGN)
+            for proc in foreground:
+                if proc.poll() is None:
+                    proc.terminate()
+            deadline = time.monotonic() + 5
+            for proc in foreground:
+                try:
+                    proc.wait(timeout=max(0, deadline - time.monotonic()))
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait()
+            signal.signal(signal.SIGTERM, previous_handler)
     return result
 
 

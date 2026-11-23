@@ -5,6 +5,8 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import signal
+import time
 import sys
 import tempfile
 import unittest
@@ -49,6 +51,47 @@ class LifecycleTests(unittest.TestCase):
             if module.identity(state['pid']):
                 os.kill(state['pid'], 9)
         self.temp.cleanup()
+
+    def check_foreground(self, selection, expected_names, existing=False):
+        if existing:
+            self.run_cli('start', '-b', '--service', 'one')
+        proc = subprocess.Popen(
+            [sys.executable, str(SCRIPT), '-c', str(self.config), 'start', *selection],
+            env=self.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            deadline = time.monotonic() + 5
+            expected_count = len(expected_names | ({'one'} if existing else set()))
+            while time.monotonic() < deadline:
+                if len(self.states()) == expected_count or proc.poll() is not None:
+                    break
+                time.sleep(0.05)
+            states = [json.loads(path.read_text()) for path in self.states()]
+            self.assertEqual({s['service'] for s in states},
+                             expected_names | ({'one'} if existing else set()))
+            self.assertIsNone(proc.poll())
+            self.assertTrue(all(module.running(s) for s in states))
+            proc.send_signal(signal.SIGINT)
+            proc.communicate(timeout=8)
+            self.assertEqual(proc.returncode, 130)
+            for state in states:
+                self.assertEqual(bool(module.identity(state['pid'])),
+                                 existing and state['service'] == 'one')
+        finally:
+            if proc.poll() is None:
+                proc.terminate()
+                proc.communicate(timeout=8)
+
+    def test_foreground_starts_all_by_default(self):
+        self.check_foreground([], {'one', 'two'})
+
+    def test_foreground_explicit_all(self):
+        self.check_foreground(['--all'], {'one', 'two'})
+
+    def test_foreground_single_service(self):
+        self.check_foreground(['--service', 'two'], {'two'})
+
+    def test_foreground_keeps_existing_service_on_interrupt(self):
+        self.check_foreground([], {'two'}, existing=True)
 
     def test_independent_stop_with_different_terminal_width(self):
         self.run_cli('start', '-b')
