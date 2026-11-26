@@ -15,7 +15,10 @@
 
 ## 工具
 
-Clawd on Desk 与 WSL Codex 的 hooks 联动排查、修改文件和回滚方法，见 [桌宠 hooks 修复记录](clawd-hooks.md)。
+Clawd on Desk 与 WSL 的 hooks 联动排查、修改文件和回滚方法：
+
+- Codex：[Codex hooks 修复记录](clawd/clawd-hooks.md)
+- Antigravity CLI：[Antigravity CLI hooks 修复记录](clawd/antigravity-hooks.md)
 
 ### 一键启动多个 Markdown 文档服务
 
